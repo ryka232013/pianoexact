@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PianoExact</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.23.1"></script>
+
+<style>
+body{
+margin:0;
+font-family:Arial,sans-serif;
+background:#111;
+color:white;
+}
+
+.container{
+max-width:800px;
+margin:auto;
+padding:25px;
+}
+
+h1{
+text-align:center;
+font-size:36px;
+}
+
+.subtitle{
+text-align:center;
+color:#aaa;
+margin-bottom:30px;
+}
+
+.box{
+background:#1e1e1e;
+padding:20px;
+border-radius:15px;
+margin-bottom:20px;
+}
+
+input,button{
+width:100%;
+padding:15px;
+margin-top:10px;
+border-radius:10px;
+border:0;
+font-size:16px;
+}
+
+button{
+font-weight:bold;
+cursor:pointer;
+}
+
+button:disabled{
+opacity:.4;
+}
+
+#status{
+margin-top:15px;
+padding:15px;
+background:#111;
+border-radius:10px;
+}
+
+#progress{
+height:8px;
+background:#333;
+border-radius:10px;
+margin-top:15px;
+overflow:hidden;
+}
+
+#bar{
+height:100%;
+width:0%;
+background:white;
+}
+
+#results{
+display:none;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🎹 PianoExact</h1>
+
+<div class="subtitle">
+Advanced Piano Transcription
+</div>
+
+<div class="box">
+
+<h2>Upload music</h2>
+
+<input
+id="file"
+type="file"
+accept="audio/*,video/*"
+>
+
+<button id="start" disabled>
+TRANSCRIBE
+</button>
+
+<div id="progress">
+<div id="bar"></div>
+</div>
+
+<div id="status">
+Choose an audio or video file.
+</div>
+
+</div>
+
+
+<div class="box" id="results">
+
+<h2>Results</h2>
+
+<div id="info"></div>
+
+<button id="download">
+DOWNLOAD MIDI
+</button>
+
+<button id="play">
+▶ PLAY PIANO
+</button>
+
+</div>
+
+</div>
+
+
+<script>
+
+let selectedFile=null;
+let model=null;
+let sequence=null;
+let midi=null;
+
+const fileInput=
+document.getElementById("file");
+
+const start=
+document.getElementById("start");
+
+const status=
+document.getElementById("status");
+
+const bar=
+document.getElementById("bar");
+
+const results=
+document.getElementById("results");
+
+const info=
+document.getElementById("info");
+
+
+fileInput.addEventListener("change",()=>{
+
+selectedFile=fileInput.files[0];
+
+if(selectedFile){
+
+start.disabled=false;
+
+status.innerText=
+"Ready: "+selectedFile.name;
+
+}
+
+});
+
+
+async function loadModel(){
+
+if(model) return;
+
+status.innerText=
+"Loading piano AI...";
+
+bar.style.width="15%";
+
+model=new mm.OnsetsAndFrames(
+"https://storage.googleapis.com/magentadata/js/checkpoints/transcription/onsets_frames_uni"
+);
+
+await model.initialize();
+
+bar.style.width="30%";
+
+}
+
+
+start.addEventListener("click",async()=>{
+
+try{
+
+start.disabled=true;
+
+await loadModel();
+
+status.innerText=
+"Reading audio...";
+
+bar.style.width="40%";
+
+const context=
+new AudioContext();
+
+const data=
+await selectedFile.arrayBuffer();
+
+const audio=
+await context.decodeAudioData(data);
+
+status.innerText=
+"Detecting piano notes...";
+
+bar.style.width="55%";
+
+sequence=
+await model.transcribeFromAudioBuffer(audio);
+
+bar.style.width="85%";
+
+status.innerText=
+"Creating MIDI...";
+
+midi=
+mm.sequenceProtoToMidi(sequence);
+
+bar.style.width="100%";
+
+showResults();
+
+status.innerText=
+"✓ TRANSCRIPTION COMPLETE";
+
+}catch(error){
+
+console.error(error);
+
+status.innerText=
+"Error: "+error.message;
+
+}
+
+start.disabled=false;
+
+});
+
+
+function showResults(){
+
+results.style.display="block";
+
+const notes=
+sequence.notes||[];
+
+info.innerHTML=
+"<p><b>Notes detected:</b> "+
+notes.length+
+"</p>"+
+"<p><b>Duration:</b> "+
+sequence.totalTime.toFixed(2)+
+" seconds</p>";
+
+}
+
+
+document.getElementById("download")
+.addEventListener("click",()=>{
+
+const blob=
+new Blob(
+[midi],
+{type:"audio/midi"}
+);
+
+const url=
+URL.createObjectURL(blob);
+
+const a=
+document.createElement("a");
+
+a.href=url;
+
+a.download=
+"PianoExact.mid";
+
+a.click();
+
+URL.revokeObjectURL(url);
+
+});
+
+
+document.getElementById("play")
+.addEventListener("click",async()=>{
+
+if(!sequence)return;
+
+const player=
+new mm.SoundFontPlayer(
+"https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus"
+);
+
+await player.loadSamples(sequence);
+
+player.start(sequence);
+
+});
+
+</script>
+
+</body>
+  </html>
